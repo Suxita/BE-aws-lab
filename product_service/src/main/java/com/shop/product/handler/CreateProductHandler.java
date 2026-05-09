@@ -8,20 +8,19 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shop.product.data.ProductRepository;
 import com.shop.product.model.Product;
 
-import java.util.List;
 import java.util.Map;
 
-public class GetProductsListHandler implements
+public class CreateProductHandler implements
         RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
 
     private final ProductRepository repository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public GetProductsListHandler() {
+    public CreateProductHandler() {
         this.repository = new ProductRepository();
     }
 
-    public GetProductsListHandler(ProductRepository repository) {
+    public CreateProductHandler(ProductRepository repository) {
         this.repository = repository;
     }
 
@@ -31,7 +30,7 @@ public class GetProductsListHandler implements
 
         if (context != null) {
             context.getLogger().log(
-                    "GetProductsList invoked. Query params: " + request.getQueryStringParameters()
+                    "CreateProduct invoked. Body: " + request.getBody()
             );
         }
 
@@ -39,9 +38,27 @@ public class GetProductsListHandler implements
         response.setHeaders(corsHeaders());
 
         try {
-            List<Product> products = repository.findAll();
-            response.setStatusCode(200);
-            response.setBody(objectMapper.writeValueAsString(products));
+            String body = request.getBody();
+            if (body == null || body.isBlank()) {
+                response.setStatusCode(400);
+                response.setBody("{\"message\": \"Request body is required\"}");
+                return response;
+            }
+
+            Product product = objectMapper.readValue(body, Product.class);
+
+            String validationError = validate(product);
+            if (validationError != null) {
+                response.setStatusCode(400);
+                response.setBody("{\"message\": \"" + validationError + "\"}");
+                return response;
+            }
+
+            Product created = repository.create(product);
+
+            response.setStatusCode(201);
+            response.setBody(objectMapper.writeValueAsString(created));
+
         } catch (Exception e) {
             if (context != null) context.getLogger().log("Error: " + e.getMessage());
             response.setStatusCode(500);
@@ -49,6 +66,19 @@ public class GetProductsListHandler implements
         }
 
         return response;
+    }
+
+    private String validate(Product p) {
+        if (p.getTitle() == null || p.getTitle().isBlank()) {
+            return "title is required";
+        }
+        if (p.getPrice() <= 0) {
+            return "price must be greater than 0";
+        }
+        if (p.getCount() < 0) {
+            return "count cannot be negative";
+        }
+        return null;   // valid
     }
 
     private Map<String, String> corsHeaders() {

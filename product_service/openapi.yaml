@@ -1,13 +1,23 @@
-openapi: 3.0.0
+openapi: 3.0.3
 info:
   title: Product Service API
+  description: AWS Lambda-backed REST API for the Shop product catalog
   version: 1.0.0
-  description: AWS Lambda-based product service
+
+servers:
+  - url: https://{apiId}.execute-api.{region}.amazonaws.com/prod
+    description: AWS API Gateway
+    variables:
+      apiId:
+        default: YOUR_API_ID
+      region:
+        default: eu-west-1
 
 paths:
   /products:
     get:
       summary: Get all products
+      description: Returns all products joined with their stock counts
       operationId: getProductsList
       responses:
         '200':
@@ -18,6 +28,47 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Product'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      summary: Create a new product
+      description: Creates a product and its stock atomically using DynamoDB transaction
+      operationId: createProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+            example:
+              title: "Clean Code"
+              description: "A handbook of agile software craftsmanship"
+              price: 39.99
+              count: 5
+      responses:
+        '201':
+          description: Product created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          description: Invalid product data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /products/{productId}:
     get:
@@ -29,28 +80,90 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
+          example: "7567ec4b-b10c-48c5-9345-fc73c48a80aa"
       responses:
         '200':
-          description: A single product
+          description: Product found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Product'
+        '400':
+          description: Missing productId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   schemas:
     Product:
       type: object
+      required:
+        - id
+        - title
+        - price
+        - count
       properties:
         id:
           type: string
+          format: uuid
+          example: "7567ec4b-b10c-48c5-9345-fc73c48a80aa"
         title:
           type: string
+          example: "The Lord of the Rings"
         description:
           type: string
+          example: "Epic fantasy novel by J.R.R. Tolkien"
         price:
           type: number
+          format: double
+          minimum: 0
+          example: 29.99
         count:
           type: integer
+          minimum: 0
+          example: 10
+
+    CreateProductRequest:
+      type: object
+      required:
+        - title
+        - price
+        - count
+      properties:
+        title:
+          type: string
+          example: "Design Patterns"
+        description:
+          type: string
+          example: "Elements of reusable object-oriented software"
+        price:
+          type: number
+          format: double
+          minimum: 0.01
+          example: 49.99
+        count:
+          type: integer
+          minimum: 0
+          example: 3
+
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Product not found"
