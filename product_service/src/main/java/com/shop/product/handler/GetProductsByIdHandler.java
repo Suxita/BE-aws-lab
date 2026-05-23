@@ -14,30 +14,37 @@ import java.util.Optional;
 public class GetProductsByIdHandler implements
         RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
 
-    private final ProductRepository repository = new ProductRepository();
+    private final ProductRepository repository;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    public GetProductsByIdHandler() {
+        this.repository = new ProductRepository();
+    }
+
+    public GetProductsByIdHandler(ProductRepository repository) {
+        this.repository = repository;
+    }
 
     @Override
     public APIGatewayProxyResponseEvent handleRequest(
             APIGatewayProxyRequestEvent request, Context context) {
 
+        Map<String, String> pathParams = request.getPathParameters();
+        if (context != null) {
+            context.getLogger().log("GetProductsById invoked. Path params: " + pathParams);
+        }
+
         APIGatewayProxyResponseEvent response = new APIGatewayProxyResponseEvent();
-        response.setHeaders(Map.of(
-                "Access-Control-Allow-Origin", "*",
-                "Access-Control-Allow-Headers", "Content-Type",
-                "Content-Type", "application/json"
-        ));
+        response.setHeaders(corsHeaders());
 
         try {
-            Map<String, String> pathParameters = request.getPathParameters();
-
-            if (pathParameters == null || !pathParameters.containsKey("productId")) {
+            if (pathParams == null || !pathParams.containsKey("productId")) {
                 response.setStatusCode(400);
-                response.setBody("{\"message\": \"Missing productId\"}");
+                response.setBody("{\"message\": \"Missing productId path parameter\"}");
                 return response;
             }
 
-            String productId = pathParameters.get("productId");
+            String productId = pathParams.get("productId");
             Optional<Product> product = repository.findById(productId);
 
             if (product.isPresent()) {
@@ -47,11 +54,21 @@ public class GetProductsByIdHandler implements
                 response.setStatusCode(404);
                 response.setBody("{\"message\": \"Product not found\"}");
             }
+
         } catch (Exception e) {
+            if (context != null) context.getLogger().log("Error: " + e.getMessage());
             response.setStatusCode(500);
             response.setBody("{\"message\": \"Internal server error\"}");
         }
 
         return response;
+    }
+
+    private Map<String, String> corsHeaders() {
+        return Map.of(
+                "Access-Control-Allow-Origin",  "*",
+                "Access-Control-Allow-Headers", "Content-Type",
+                "Content-Type",                 "application/json"
+        );
     }
 }
